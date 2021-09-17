@@ -60,31 +60,75 @@ public abstract class AbstractEtlService {
                 logger.debug("etl sql : {}, values:{}", sql, values);
             }
 
-            // 获取总数，这边直接通过主表获取，假如存在条件的话，拼接一下条件
-            String countSql = "SELECT COUNT(1) FROM " + tableFullName;
+            long cnt = 0;
 
-            if (etlCondition != null) {
-                countSql += " " + etlCondition;
-            }
+            // 假如存在sequenceColumn的配置
+            if (sequenceColumn != null) {
+                // 获取一下最大值
+                String sequenceSql = "SELECT MIN(" + sequenceColumn + ") as min, MAX(" + sequenceColumn
+                        + ") as max FROM " + tableFullName;
 
-            if (logger.isInfoEnabled()) {
-                logger.info(type + " 全量count sql : {}, values:{}", countSql, values);
-            }
-
-            long cnt = (Long) Util.sqlRS(dataSource, countSql, values, rs -> {
-                Long count = null;
-                try {
-                    if (rs.next()) {
-                        count = ((Number) rs.getObject(1)).longValue();
-                        if (logger.isInfoEnabled()) {
-                            logger.info(type + " 待同步数据总量:{}", count);
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.error(e.getMessage(), e);
+                if (etlCondition != null) {
+                    sequenceSql += " " + etlCondition;
                 }
-                return count == null ? 0L : count;
-            });
+
+                @SuppressWarnings("unchecked")
+                HashMap<String, Long> sequenceMap = (HashMap<String, Long>) Util.sqlRS(dataSource, sequenceSql,
+                        values, rs -> {
+                            Long max = null;
+                            Long min = null;
+                            try {
+                                if (rs.next()) {
+                                    min = ((Number) rs.getObject("min")).longValue();
+                                    max = ((Number) rs.getObject("max")).longValue();
+                                }
+                            } catch (Exception e) {
+                                logger.error(e.getMessage(), e);
+                            }
+                            max = (max == null ? 1L : max);
+                            min = (min == null ? 1L : min);
+
+                            HashMap<String, Long> map = new HashMap<>();
+                            map.put("min", min);
+                            map.put("max", max);
+
+                            return map;
+                        });
+
+                long maxId = sequenceMap.get("max");
+                long minId = sequenceMap.get("min") - 1;
+                cnt = maxId - minId + 1;
+
+                if (logger.isInfoEnabled()) {
+                    logger.info("全量导入, start:{}, end:{}", maxId, minId);
+                }
+            } else {
+                // 获取总数，这边直接通过主表获取，假如存在条件的话，拼接一下条件
+                String countSql = "SELECT COUNT(1) FROM " + tableFullName;
+
+                if (etlCondition != null) {
+                    countSql += " " + etlCondition;
+                }
+
+                if (logger.isInfoEnabled()) {
+                    logger.info(type + " 全量count sql : {}, values:{}", countSql, values);
+                }
+
+                cnt = (Long) Util.sqlRS(dataSource, countSql, values, rs -> {
+                    Long count = null;
+                    try {
+                        if (rs.next()) {
+                            count = ((Number) rs.getObject(1)).longValue();
+                            if (logger.isInfoEnabled()) {
+                                logger.info(type + " 待同步数据总量:{}", count);
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.error(e.getMessage(), e);
+                    }
+                    return count == null ? 0L : count;
+                });
+            }
 
             // 当大于1万条记录时开启多线程
             // NOTE: 采用limit分页取数据的方式，大表性能存在问题，使用线程并不能解决该问题，实际上线程在这里的价值并不大
@@ -136,7 +180,7 @@ public abstract class AbstractEtlService {
                     long minSequence = sequenceMap.get("min") - 1;
 
                     if (logger.isInfoEnabled()) {
-                        logger.info("ES7 全量导入, start:{}, end:{}", minSequence, maxSequence);
+                        logger.info("全量导入, start:{}, end:{}", minSequence, maxSequence);
                     }
 
                     ExecutorService executor = Util.newFixedThreadPool(threadCount, 5000L);
@@ -206,6 +250,6 @@ public abstract class AbstractEtlService {
     }
 
     protected abstract boolean executeSqlImport(DataSource ds, String sql, List<Object> values,
-            AdapterConfig.AdapterMapping mapping, AtomicLong impCount, List<String> errMsg);
+                                                AdapterConfig.AdapterMapping mapping, AtomicLong impCount, List<String> errMsg);
 
 }

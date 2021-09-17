@@ -21,7 +21,7 @@ public class DatasourceConfig {
     private String type = "mysql"; // 类型, 默认为mysql
     private String username; // jdbc username
     private String password; // jdbc password
-    private Integer maxActive = Math.max(3, Runtime.getRuntime().availableProcessors()); // 连接池最大连接数, 最小为3
+    private Integer maxActive = 3; // 连接池最大连接数,默认为3
 
     public String getDriver() {
         return driver;

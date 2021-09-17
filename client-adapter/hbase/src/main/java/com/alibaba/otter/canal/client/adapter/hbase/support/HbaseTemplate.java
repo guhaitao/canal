@@ -80,7 +80,7 @@ public class HbaseTemplate {
 
     public void disableTable(String tableName) {
         try (HBaseAdmin admin = (HBaseAdmin) getConnection().getAdmin()) {
-            admin.disableTable(tableName);
+            admin.disableTable(TableName.valueOf(tableName));
         } catch (IOException e) {
             logger.error(e.getMessage(), e);
             throw new RuntimeException(e);
@@ -89,10 +89,10 @@ public class HbaseTemplate {
 
     public void deleteTable(String tableName) {
         try (HBaseAdmin admin = (HBaseAdmin) getConnection().getAdmin()) {
-            if (admin.isTableEnabled(tableName)) {
+            if (admin.isTableEnabled(TableName.valueOf(tableName))) {
                 disableTable(tableName);
             }
-            admin.deleteTable(tableName);
+            admin.deleteTable(TableName.valueOf(tableName));
         } catch (IOException e) {
             logger.error(e.getMessage(), e);
             throw new RuntimeException(e);
